@@ -11,8 +11,13 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// ScreenConfig  网页截屏配置
 type ScreenConfig struct {
-	URL string `json:"url" form:"url" binding:"required"`
+	URL     string `json:"url" form:"url" binding:"required"`
+	Width   int64  `json:"width" form:"width"`
+	Height  int64  `json:"height" form:"height"`
+	Full    int64  `json:"full" form:"full"`
+	Quality int64  `json:"quality" form:"quality"`
 }
 
 type ScreenshotRes struct {
@@ -20,11 +25,18 @@ type ScreenshotRes struct {
 }
 
 func GetScreenShotByScreenConfig(config ScreenConfig) (err error, imageBase64 string) {
-	_ = []chromedp.ExecAllocatorOption{
-		chromedp.ExecPath("/headless-shell/headless-shell"),
+	var allocCtx context.Context
+	var cancel context.CancelFunc
+
+	if gin.Mode() == gin.ReleaseMode {
+		/* release */
+		allocCtx, cancel = chromedp.NewRemoteAllocator(context.Background(), "ws://browser:9222/")
+	} else {
+		/* dev */
+		allocCtx, cancel = chromedp.NewContext(context.Background())
 	}
 
-	allocCtx, _ := chromedp.NewRemoteAllocator(context.Background(), "ws://browser:9222/")
+	defer cancel()
 
 	ctx, cancel := chromedp.NewContext(
 		allocCtx,
@@ -32,8 +44,7 @@ func GetScreenShotByScreenConfig(config ScreenConfig) (err error, imageBase64 st
 	defer cancel()
 
 	var buf []byte
-
-	err = chromedp.Run(ctx, fullScreenShot(config, &buf))
+	err = chromedp.Run(ctx, screenShot(config, &buf))
 	if err != nil {
 		log.Println("full screenshot error")
 		return
@@ -43,11 +54,32 @@ func GetScreenShotByScreenConfig(config ScreenConfig) (err error, imageBase64 st
 	return
 }
 
-func fullScreenShot(config ScreenConfig, res *[]byte) chromedp.Tasks {
-	return chromedp.Tasks{
-		chromedp.EmulateViewport(1280, 800),
+func screenShot(config ScreenConfig, res *[]byte) chromedp.Tasks {
+	/* 默认宽度 */
+	width := int64(1280)
+	if config.Width > 0 {
+		width = config.Width
+	}
+	/* 默认高度 */
+	height := int64(800)
+	if config.Height > 0 {
+		height = config.Height
+	}
+
+	navigate := chromedp.Tasks{
+		chromedp.EmulateViewport(width, height),
 		chromedp.Navigate(config.URL),
-		chromedp.FullScreenshot(res, 70),
+	}
+
+	if config.Full == 1 {
+		return chromedp.Tasks{
+			navigate,
+			chromedp.FullScreenshot(res, int(config.Quality)),
+		}
+	}
+	return chromedp.Tasks{
+		navigate,
+		chromedp.CaptureScreenshot(res),
 	}
 }
 
