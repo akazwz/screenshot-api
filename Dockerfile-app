@@ -1,0 +1,14 @@
+FROM golang:alpine AS devlopement
+MAINTAINER akazwz
+WORKDIR /home/screenshot
+ADD . /home/screenshot
+ENV GOPROXY=https://goproxy.cn,direct
+RUN go mod tidy
+RUN go build -o app
+
+FROM alpine:latest AS production
+WORKDIR /root/
+COPY --from=devlopement /home/screenshot/app .
+EXPOSE 8000:8000
+ENV GIN_MODE=release
+ENTRYPOINT ["./app"]

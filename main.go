@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/base64"
-	"io/ioutil"
 	"log"
 	"net/http"
 
@@ -21,8 +20,14 @@ type ScreenshotRes struct {
 }
 
 func GetScreenShotByScreenConfig(config ScreenConfig) (err error, imageBase64 string) {
+	_ = []chromedp.ExecAllocatorOption{
+		chromedp.ExecPath("/headless-shell/headless-shell"),
+	}
+
+	allocCtx, _ := chromedp.NewRemoteAllocator(context.Background(), "ws://browser:9222/")
+
 	ctx, cancel := chromedp.NewContext(
-		context.Background(),
+		allocCtx,
 	)
 	defer cancel()
 
@@ -30,10 +35,11 @@ func GetScreenShotByScreenConfig(config ScreenConfig) (err error, imageBase64 st
 
 	err = chromedp.Run(ctx, fullScreenShot(config, &buf))
 	if err != nil {
+		log.Println("full screenshot error")
 		return
 	}
 	imageBase64 = base64.StdEncoding.EncodeToString(buf)
-	err = ioutil.WriteFile("fullScreenshot.png", buf, 0o644)
+	//err = ioutil.WriteFile("fullScreenshot.png", buf, 0o644)
 	return
 }
 
@@ -65,7 +71,6 @@ func main() {
 		}
 
 		err, imageBase64 := GetScreenShotByScreenConfig(config)
-		log.Println(imageBase64)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{
 				"msg": "截图失败",
@@ -76,7 +81,7 @@ func main() {
 		return
 	})
 
-	err := r.Run()
+	err := r.Run("0.0.0.0:8000")
 	if err != nil {
 		log.Fatalln("run error")
 	}
