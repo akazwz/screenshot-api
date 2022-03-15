@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/chromedp/cdproto/emulation"
+	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -21,6 +23,7 @@ type ScreenConfig struct {
 	Quality int64  `json:"quality" form:"quality"`
 	Timeout int64  `json:"timeout" form:"timeout"`
 	Sleep   int64  `json:"sleep" form:"sleep"`
+	Dark    bool   `json:"dark" form:"dark"`
 }
 
 type ScreenshotRes struct {
@@ -41,7 +44,8 @@ func GetScreenShotByScreenConfig(config ScreenConfig) (err error, imageBase64 st
 
 	defer cancel()
 
-	timeout := 15 * time.Second
+	/* 超时 ctx */
+	timeout := 10 * time.Second
 	/* 自定义超时时间为 0 - 30 */
 	if config.Timeout > 0 && config.Timeout < 30 {
 		timeout = time.Duration(config.Timeout) * time.Second
@@ -81,7 +85,7 @@ func screenShot(config ScreenConfig, res *[]byte) chromedp.Tasks {
 
 	sleep := 0 * time.Second
 	/* 自定义睡眠时间为 0 - 10 */
-	if config.Sleep > 0 && config.Sleep < 10 {
+	if config.Sleep > 0 && config.Sleep <= 10 {
 		sleep = time.Duration(config.Sleep) * time.Second
 	}
 
@@ -89,6 +93,10 @@ func screenShot(config ScreenConfig, res *[]byte) chromedp.Tasks {
 		chromedp.EmulateViewport(width, height),
 		chromedp.Navigate(config.URL),
 		chromedp.Sleep(sleep),
+		chromedp.ActionFunc(func(ctx context.Context) error {
+			err := emulation.SetAutoDarkModeOverride().WithEnabled(config.Dark).Do(ctx)
+			return err
+		}),
 	}
 
 	if config.Full {
@@ -99,7 +107,11 @@ func screenShot(config ScreenConfig, res *[]byte) chromedp.Tasks {
 	}
 	return chromedp.Tasks{
 		navigate,
-		chromedp.CaptureScreenshot(res),
+		chromedp.ActionFunc(func(ctx context.Context) error {
+			data, err := page.CaptureScreenshot().WithQuality(config.Quality).WithFormat("jpeg").Do(ctx)
+			*res = data
+			return err
+		}),
 	}
 }
 
