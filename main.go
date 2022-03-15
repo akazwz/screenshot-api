@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/chromedp/chromedp"
 	"github.com/gin-contrib/cors"
@@ -16,8 +17,10 @@ type ScreenConfig struct {
 	URL     string `json:"url" form:"url" binding:"required"`
 	Width   int64  `json:"width" form:"width"`
 	Height  int64  `json:"height" form:"height"`
-	Full    int64  `json:"full" form:"full"`
+	Full    bool   `json:"full" form:"full"`
 	Quality int64  `json:"quality" form:"quality"`
+	Timeout int64  `json:"timeout" form:"timeout"`
+	Sleep   int64  `json:"sleep" form:"sleep"`
 }
 
 type ScreenshotRes struct {
@@ -38,14 +41,24 @@ func GetScreenShotByScreenConfig(config ScreenConfig) (err error, imageBase64 st
 
 	defer cancel()
 
+	timeout := 15 * time.Second
+	/* 自定义超时时间为 0 - 30 */
+	if config.Timeout > 0 && config.Timeout < 30 {
+		timeout = time.Duration(config.Timeout) * time.Second
+	}
+
+	ctxTimeout, cancel := context.WithTimeout(allocCtx, timeout)
+	defer cancel()
+
 	ctx, cancel := chromedp.NewContext(
-		allocCtx,
+		ctxTimeout,
 	)
 	defer cancel()
 
 	var buf []byte
 	err = chromedp.Run(ctx, screenShot(config, &buf))
 	if err != nil {
+		log.Println(err)
 		log.Println("full screenshot error")
 		return
 	}
@@ -66,12 +79,19 @@ func screenShot(config ScreenConfig, res *[]byte) chromedp.Tasks {
 		height = config.Height
 	}
 
+	sleep := 0 * time.Second
+	/* 自定义睡眠时间为 0 - 10 */
+	if config.Timeout > 0 && config.Timeout < 10 {
+		sleep = time.Duration(config.Timeout) * time.Second
+	}
+
 	navigate := chromedp.Tasks{
 		chromedp.EmulateViewport(width, height),
 		chromedp.Navigate(config.URL),
+		chromedp.Sleep(sleep),
 	}
 
-	if config.Full == 1 {
+	if config.Full {
 		return chromedp.Tasks{
 			navigate,
 			chromedp.FullScreenshot(res, int(config.Quality)),
@@ -98,6 +118,14 @@ func main() {
 		if c.ShouldBindQuery(&config) != nil {
 			c.JSON(http.StatusBadRequest, gin.H{
 				"msg": "参数错误",
+			})
+			return
+		}
+
+		/* 判断超时时间和失眠时间 */
+		if config.Sleep >= config.Timeout {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"msg": "睡眠时间不能大于等于超时时间",
 			})
 			return
 		}
