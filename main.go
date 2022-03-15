@@ -81,8 +81,8 @@ func screenShot(config ScreenConfig, res *[]byte) chromedp.Tasks {
 
 	sleep := 0 * time.Second
 	/* 自定义睡眠时间为 0 - 10 */
-	if config.Timeout > 0 && config.Timeout < 10 {
-		sleep = time.Duration(config.Timeout) * time.Second
+	if config.Sleep > 0 && config.Sleep < 10 {
+		sleep = time.Duration(config.Sleep) * time.Second
 	}
 
 	navigate := chromedp.Tasks{
@@ -122,8 +122,8 @@ func main() {
 			return
 		}
 
-		/* 判断超时时间和失眠时间 */
-		if config.Sleep >= config.Timeout {
+		/* 判断超时时间和睡眠时间 */
+		if config.Sleep >= config.Timeout && config.Sleep > 0 {
 			c.JSON(http.StatusBadRequest, gin.H{
 				"msg": "睡眠时间不能大于等于超时时间",
 			})
